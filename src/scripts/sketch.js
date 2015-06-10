@@ -5,42 +5,49 @@
 		var scene = three.scene(),
 			camera = three.camera(),
 			renderer = three.renderer(),
-			container,
-			model,
-			previousModel,
+			skulls = [],
 
 			init = function(){
-				var geometry = new THREE.BoxGeometry( 1, 1, 1 ),
-					material = new THREE.MeshLambertMaterial( { color: 0xffffff } ),
-					mesh = new THREE.Mesh( geometry, material ),
-					directionalLight = new THREE.DirectionalLight( 0xffffff );
-
-				container = new THREE.Object3D();
-				model = new THREE.Object3D();
-				previousModel = model.clone();
-				
-				container.add(mesh);
-				scene.add( container );
+				var directionalLight = new THREE.DirectionalLight( 0xfffffff ),
+					reflectedLight =  new THREE.DirectionalLight( 0xeeffff, 0.65 );
 
 				scene.add(directionalLight);
-				directionalLight.position.set( 1, 1, 1 );
+				directionalLight.position.set( 0, 1, 0 );
 
-				renderer.setClearColor( 0x333333 );
+				scene.add(reflectedLight);
+				reflectedLight.position.set( 0, -1, 0 );
 
-				camera.position.z = 3;
+				renderer.setClearColor( 0xffffff );
+
+				camera.position.z = 25;
+
+				new THREE.OBJLoader().load('skull.obj', populateScene);
+
+			},
+
+			populateScene = function(skull){
+				skull.children[0].material = new THREE.MeshLambertMaterial({wrapAround: true});
+				for (var i = 0; i < 40; i++) {
+					var currentSkull = skull.clone();
+					currentSkull.position.x = Math.random() * 40 - 20;
+					currentSkull.position.y = ( Math.random() * 10 - 5 ) * ( 1 - Math.abs( currentSkull.position.x/25 ) );
+					currentSkull.position.z = ( Math.random() * 10 - 5 ) * ( 1 - Math.abs( currentSkull.position.x/25 ) );
+					currentSkull.scale.multiplyScalar(0.1 + Math.sin( 1 - ( Math.abs( currentSkull.position.x/25 ) ) ) );
+					currentSkull.children[0].rotation.set( Math.random() * ( Math.PI * 2 ), Math.random() * ( Math.PI * 2 ), 0)
+					scene.add(currentSkull);
+					skulls.push({container:currentSkull, rotationVelocity: Math.random() * 0.001});
+				};
 			},
 			
 			update = function(timestep){
-				var rotationVelocity = 0.001;
-				
-				model.clone(previousModel);
-				model.rotation.x += rotationVelocity * timestep;
-				model.rotation.y += rotationVelocity * timestep;
-				
+				skulls.forEach( function( skull ){
+					skull.container.rotation.x += skull.rotationVelocity * timestep;
+					skull.container.rotation.y += skull.rotationVelocity * timestep;
+				} );
 			},
 			
 			draw = function(interpolation){
-				THREE.Quaternion.slerp ( previousModel.quaternion, model.quaternion, container.quaternion, interpolation );
+				
 				renderer.render(scene, camera);
 			}
 
