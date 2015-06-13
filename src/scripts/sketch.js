@@ -6,7 +6,7 @@
 			camera = three.camera(),
 			renderer = three.renderer(),
 			skulls = [],
-			curve,
+			lines = [],
 			t = 0.002,
 
 			init = function(){
@@ -22,8 +22,8 @@
 
 				renderer.setClearColor( 0xffffff );
 
-				camera.position.z = 15;
-				camera.lookAt(new THREE.Vector3(0, 2, 0))
+				camera.position.z = 20;
+				camera.lookAt(new THREE.Vector3(0, 4, 0))
 
 				new THREE.OBJLoader().load('skull.obj', populateScene);
 
@@ -31,24 +31,88 @@
 
 			populateScene = function(skull){
 				
+				var numSkulls = 40,
+					i,
+					currentSkull,
+					curve,
+					rot,
+					z1,
+					z2,
+					numLines = 50,
+					lineGeo,
+					windCurve,
+					j,
+					windLine,
+					colors;
+
 				skull.children[0].material = new THREE.MeshLambertMaterial({wrapAround: true});
 				skull.children[0].position.y = -2.5;
 				skull.children[0].rotation.x = 0.2;
 				
-				for (var i = 0; i < 40; i++) {
-					var currentSkull = skull.clone();
+				for (i = 0; i < numSkulls; i++) {
+					
+					currentSkull = skull.clone();
 					scene.add(currentSkull);
-					var curve = new THREE.CubicBezierCurve3(
-						new THREE.Vector3( -15, 0, 0 ),
-						new THREE.Vector3( -7 + ( Math.random() * 10 - 5 ), 15 + ( Math.random() * 10 - 5 ), Math.random() * 6 - 3 ),
-						new THREE.Vector3( 10, -10, Math.random() * 6 - 3 ),
-						new THREE.Vector3( 20, 0, 0 )
-					);
-					var rot = Math.random() * Math.PI * 2;
+
+					z1 = Math.random() - 0.5;
+					z2 = Math.random() * 2 - 1; 
+
+					curve = new THREE.SplineCurve3([
+						new THREE.Vector3( -20, 0, 0 ),
+						new THREE.Vector3( -12, 1, z1 ),
+						new THREE.Vector3( -8, 10 - Math.random() * 10, z2 ),
+						new THREE.Vector3( 3, 10 - Math.random() * 10, z2 ),
+						new THREE.Vector3( 12, 1, z1 ),
+						new THREE.Vector3( 20, 0, 0 ),
+					]);
+
+					rot = Math.random() * Math.PI * 2;
 					skull.rotation.set(rot, rot, rot);
-					skulls.push({container:currentSkull, rotationVelocity: 0.0005 + Math.random()*0.001, time:Math.random(), curve:curve});
+					skulls.push({
+						container:currentSkull, 
+						rotationVelocity: 0.0003 + Math.random()*0.0005, 
+						time: i/numSkulls, 
+						curve: curve,
+						maxScale: 1
+					});
 				};
 				
+				colors = [0xe3feff, 0xf8ffff, 0xf1ffff, 0xe3f7ff, 0xc8ddde];
+
+				for(i = 0; i < numLines; i++){
+
+					windCurve = new THREE.SplineCurve3( [
+						new THREE.Vector3( -18 - ( Math.random() * 4 - 2 ), Math.random(), 3 ),
+						new THREE.Vector3( -10 - ( Math.random() * 4 - 2 ), 2 + Math.random() * 4, 3 ),
+						new THREE.Vector3( 6 + ( Math.random() * 4 - 2 ), -1 - Math.random() * 2, 3 ),
+						new THREE.Vector3( 18 + ( Math.random() * 4 - 2 ), Math.random(), 3 ),
+					] );
+
+					lineGeo = new THREE.Geometry();
+					for(j = 0; j < 70; j++){
+						lineGeo.vertices.push(windCurve.getPoint(0));
+					}
+
+					var lw;
+					if( Math.random() > 0.8 ){
+						lw = 5 + Math.random() * 5;
+					}else{
+						lw = 1 + Math.random() * 2;
+					}
+					
+					windLine = {
+						line: new THREE.Line(lineGeo, new THREE.LineBasicMaterial( { color : colors[Math.floor(Math.random()*5)], linewidth: lw} ) ),
+						curve: windCurve,
+						time: 0,
+						currentOffset: 0,
+						offset: Math.random()*5000
+					}
+
+					lines.push(windLine);
+					scene.add(windLine.line);
+
+				}
+
 			},
 			
 			update = function(timestep){
@@ -62,17 +126,54 @@
 					}
 					skull.container.position.copy(skull.curve.getPoint(skull.time));
 
-					if(skull.time < 0.5){
-						scale = skull.time * 2;
-					}else{
-						scale = Math.pow( 1 - ( ( skull.time - 0.5 ) * 2 ), 4 );
-					}
+					scale = Math.sin(skull.time * Math.PI) * skull.maxScale;
+					
 					skull.container.scale.set(scale, scale, scale)
 
 					skull.container.rotation.x += skull.rotationVelocity * timestep;
 					skull.container.rotation.y += skull.rotationVelocity * timestep;
 					
 				} );
+
+
+				lines.forEach(function(windLine){
+					if(windLine.currentOffset < windLine.offset){
+				
+						windLine.currentOffset += 1000/timestep;
+					
+					}else{
+
+						windLine.time += 0.005;
+						if(windLine.time > 1){
+							windLine.time = 1;
+						}
+
+						for(var i = windLine.line.geometry.vertices.length-1; i > -1; i--){
+							var currentVert = windLine.line.geometry.vertices[i];
+							var nextVert = windLine.line.geometry.vertices[i-1];
+							if(nextVert){
+								currentVert.copy(nextVert);
+							}else{
+								currentVert.copy(windLine.curve.getPoint(windLine.time));
+							}
+						}
+
+						if(windLine.line.geometry.vertices[windLine.line.geometry.vertices.length-1].distanceTo(windLine.curve.getPoint(1)) === 0){
+							
+							windLine.currentOffset = 0;
+							windLine.time = 0;
+							windLine.line.geometry.vertices.forEach(function(vertex){
+								vertex.copy(windLine.curve.getPoint(windLine.time));
+							});
+							
+
+						}
+
+						windLine.line.geometry.verticesNeedUpdate = true;
+
+					}
+				})
+
 			},
 			
 			draw = function(interpolation){
